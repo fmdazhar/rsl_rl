@@ -1,3 +1,4 @@
+
 #  Copyright 2021 ETH Zurich, NVIDIA CORPORATION
 #  SPDX-License-Identifier: BSD-3-Clause
 
@@ -239,7 +240,6 @@ class OnPolicyRunner:
             #   f"""{'Mean reward/step:':>{pad}} {locs['mean_reward']:.2f}\n"""
             #   f"""{'Mean episode length/episode:':>{pad}} {locs['mean_trajectory_length']:.2f}\n""")
 
-        log_string += ep_string
         log_string += (
             f"""{'-' * width}\n"""
             f"""{'Total timesteps:':>{pad}} {self.tot_timesteps}\n"""
