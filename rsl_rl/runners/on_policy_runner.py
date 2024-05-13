@@ -81,7 +81,7 @@ class OnPolicyRunner:
             elif self.logger_type == "wandb":
                 from rsl_rl.utils.wandb_utils import WandbSummaryWriter
 
-                self.writer = WandbSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg)
+                self.writer = WandbSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg, run_name=self.cfg["run_name"], tags=self.cfg["tags"])
                 self.writer.log_config(self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg)
             elif self.logger_type == "tensorboard":
                 self.writer = TensorboardSummaryWriter(log_dir=self.log_dir, flush_secs=10)
