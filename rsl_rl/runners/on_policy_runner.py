@@ -105,74 +105,74 @@ class OnPolicyRunner:
 
         start_iter = self.current_learning_iteration
         tot_iter = start_iter + num_learning_iterations
-        with torch.profiler.profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            schedule=torch.profiler.schedule(wait=2, warmup=1, active=1, repeat=1),
-            on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/rsl_rl'),
-            record_shapes=True,
-            profile_memory=True,
-            with_stack=True
-        ) as prof:
-            for it in range(start_iter, tot_iter):
-                start = time.time()
-                # Rollout
-                with torch.inference_mode():
-                    for i in range(self.num_steps_per_env):
-                        actions = self.alg.act(obs, critic_obs)
-                        obs, rewards, dones, infos = self.env.step(actions)
-                        obs = self.obs_normalizer(obs)
-                        if "critic" in infos["observations"]:
-                            critic_obs = self.critic_obs_normalizer(infos["observations"]["critic"])
-                        else:
-                            critic_obs = obs
-                        obs, critic_obs, rewards, dones = (
-                            obs.to(self.device),
-                            critic_obs.to(self.device),
-                            rewards.to(self.device),
-                            dones.to(self.device),
-                        )
-                        self.alg.process_env_step(rewards, dones, infos)
+        # with torch.profiler.profile(
+        #     activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+        #     schedule=torch.profiler.schedule(wait=2, warmup=1, active=1, repeat=1),
+        #     on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/rsl_rl'),
+        #     record_shapes=True,
+        #     profile_memory=True,
+        #     with_stack=True
+        # ) as prof:
+        for it in range(start_iter, tot_iter):
+            start = time.time()
+            # Rollout
+            with torch.inference_mode():
+                for i in range(self.num_steps_per_env):
+                    actions = self.alg.act(obs, critic_obs)
+                    obs, rewards, dones, infos = self.env.step(actions)
+                    obs = self.obs_normalizer(obs)
+                    if "critic" in infos["observations"]:
+                        critic_obs = self.critic_obs_normalizer(infos["observations"]["critic"])
+                    else:
+                        critic_obs = obs
+                    obs, critic_obs, rewards, dones = (
+                        obs.to(self.device),
+                        critic_obs.to(self.device),
+                        rewards.to(self.device),
+                        dones.to(self.device),
+                    )
+                    self.alg.process_env_step(rewards, dones, infos)
 
-                        if self.log_dir is not None:
-                            # Book keeping
-                            # note: we changed logging to use "log" instead of "episode" to avoid confusion with
-                            # different types of logging data (rewards, curriculum, etc.)
-                            if "episode" in infos:
-                                ep_infos.append(infos["episode"])
-                            elif "log" in infos:
-                                ep_infos.append(infos["log"])
-                            cur_reward_sum += rewards
-                            cur_episode_length += 1
-                            new_ids = (dones > 0).nonzero(as_tuple=False)
-                            rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
-                            lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
-                            cur_reward_sum[new_ids] = 0
-                            cur_episode_length[new_ids] = 0
+                    if self.log_dir is not None:
+                        # Book keeping
+                        # note: we changed logging to use "log" instead of "episode" to avoid confusion with
+                        # different types of logging data (rewards, curriculum, etc.)
+                        if "episode" in infos:
+                            ep_infos.append(infos["episode"])
+                        elif "log" in infos:
+                            ep_infos.append(infos["log"])
+                        cur_reward_sum += rewards
+                        cur_episode_length += 1
+                        new_ids = (dones > 0).nonzero(as_tuple=False)
+                        rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
+                        lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
+                        cur_reward_sum[new_ids] = 0
+                        cur_episode_length[new_ids] = 0
 
-                    stop = time.time()
-                    collection_time = stop - start
-
-                    # Learning step
-                    start = stop
-                    self.alg.compute_returns(critic_obs)
-
-                mean_value_loss, mean_surrogate_loss = self.alg.update()
                 stop = time.time()
-                learn_time = stop - start
-                self.current_learning_iteration = it
-                if self.log_dir is not None:
-                    self.log(locals())
-                if it % self.save_interval == 0:
-                    self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
-                ep_infos.clear()
-                if it == start_iter:
-                    # obtain all the diff files
-                    git_file_paths = store_code_state(self.log_dir, self.git_status_repos)
-                    # if possible store them to wandb
-                    if self.logger_type in ["wandb", "neptune"] and git_file_paths:
-                        for path in git_file_paths:
-                            self.writer.save_file(path)
-                prof.step()
+                collection_time = stop - start
+
+                # Learning step
+                start = stop
+                self.alg.compute_returns(critic_obs)
+
+            mean_value_loss, mean_surrogate_loss = self.alg.update()
+            stop = time.time()
+            learn_time = stop - start
+            self.current_learning_iteration = it
+            if self.log_dir is not None:
+                self.log(locals())
+            if it % self.save_interval == 0:
+                self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
+            ep_infos.clear()
+            if it == start_iter:
+                # obtain all the diff files
+                git_file_paths = store_code_state(self.log_dir, self.git_status_repos)
+                # if possible store them to wandb
+                if self.logger_type in ["wandb", "neptune"] and git_file_paths:
+                    for path in git_file_paths:
+                        self.writer.save_file(path)
+                # prof.step()
 
         self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
 
