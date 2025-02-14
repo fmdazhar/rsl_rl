@@ -64,7 +64,7 @@ class ActorCritic(nn.Module):
         print(f"Critic MLP: {self.critic}")
 
         # Action noise
-        self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
+        self.log_std = nn.Parameter(torch.log(init_noise_std * torch.ones(num_actions)))
         self.distribution = None
         # disable args validation for speedup
         Normal.set_default_validate_args = False
@@ -101,7 +101,8 @@ class ActorCritic(nn.Module):
 
     def update_distribution(self, observations):
         mean = self.actor(observations)
-        self.distribution = Normal(mean, mean * 0.0 + self.std)
+        std = self.log_std.exp().expand_as(mean)
+        self.distribution = Normal(mean, std)
 
     def act(self, observations, **kwargs):
         self.update_distribution(observations)
