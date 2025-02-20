@@ -65,15 +65,15 @@ class RolloutStorage:
             self.privileged_observations = torch.zeros(num_transitions_per_env, num_envs, *privileged_obs_shape, device=self.device)
         else:
             self.privileged_observations = None
-        self.rewards = torch.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
+        self.rewards = torch.zeros(num_transitions_per_env, num_envs, 2, device=self.device)
         self.actions = torch.zeros(num_transitions_per_env, num_envs, *actions_shape, device=self.device)
         self.dones = torch.zeros(num_transitions_per_env, num_envs, 1, device=self.device).byte()
 
         # For PPO
-        self.actions_log_prob = torch.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-        self.values = torch.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-        self.returns = torch.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
-        self.advantages = torch.zeros(num_transitions_per_env, num_envs, 1, device=self.device)
+        self.actions_log_prob = torch.zeros(num_transitions_per_env, num_envs, 2, device=self.device)
+        self.values = torch.zeros(num_transitions_per_env, num_envs, 2, device=self.device)
+        self.returns = torch.zeros(num_transitions_per_env, num_envs, 2, device=self.device)
+        self.advantages = torch.zeros(num_transitions_per_env, num_envs, 2, device=self.device)
         self.mu = torch.zeros(num_transitions_per_env, num_envs, *actions_shape, device=self.device)
         self.sigma = torch.zeros(num_transitions_per_env, num_envs, *actions_shape, device=self.device)
 

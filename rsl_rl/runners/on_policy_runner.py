@@ -61,13 +61,13 @@ class OnPolicyRunner:
         else:
             num_critic_obs = self.env.num_obs
         actor_critic_class = eval(self.cfg["policy_class_name"]) # ActorCritic
-        actor_critic: ActorCritic = actor_critic_class( self.env.cfg.env.num_proprio,
-                                                        self.env.cfg.env.num_proprio,
+        actor_critic: ActorCritic = actor_critic_class( self.env.num_proprio,
+                                                        self.env.num_proprio,
                                                         self.env.num_actions,
                                                         **self.policy_cfg, 
-                                                        num_priv=env.cfg.env.num_priv,
-                                                        num_hist=env.cfg.env.history_len, 
-                                                        num_prop=env.cfg.env.num_proprio,
+                                                        num_priv=env.num_priv,
+                                                        num_hist=env.history_len, 
+                                                        num_prop=env.num_proprio,
                                                         ).to(self.device)
         alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
         self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
@@ -86,7 +86,7 @@ class OnPolicyRunner:
         self.current_learning_iteration = 0
         self.dagger_update_freq = self.alg_cfg["dagger_update_freq"]
 
-        _, _ = self.env.reset()
+        _ = self.env.reset()
 
     
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
@@ -117,7 +117,7 @@ class OnPolicyRunner:
 
         tot_iter = self.current_learning_iteration + num_learning_iterations
         for it in range(self.current_learning_iteration, tot_iter):
-            self.env.update_command_curriculum()
+            # self.env.update_command_curriculum()
 
             start = time.time()
             hist_encoding = it % self.dagger_update_freq == 0
@@ -126,7 +126,7 @@ class OnPolicyRunner:
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
                     actions = self.alg.act(obs, critic_obs, hist_encoding)
-                    obs, privileged_obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
+                    obs, privileged_obs, rewards, dones, infos = self.env.step(actions.to(self.device))
                     critic_obs = privileged_obs if privileged_obs is not None else obs
                     obs, critic_obs, rewards, dones = obs.to(self.device), critic_obs.to(self.device), rewards.to(self.device), dones.to(self.device)
                     self.alg.process_env_step(rewards, dones, infos)

@@ -184,10 +184,14 @@ class ActorCritic(nn.Module):
             
             def forward(self, obs, hist_encoding=False):
                 obs_prop = obs[:, :self.num_prop]
+                print("obs_dim", obs_prop.ndim)
                 if hist_encoding:
                     latent = self.infer_hist_latent(obs)
                 else:
                     latent = self.infer_priv_latent(obs)
+                    print("latent", latent)
+                    print("latent_dim", latent.ndim )
+
                 backbone_input = torch.cat([obs_prop, latent], dim=1)
                 backbone_output = self.actor_backbone(backbone_input)
                 leg_output = self.actor_leg_control_head(backbone_output)
