@@ -121,6 +121,7 @@ class OnPolicyRunner:
 
             start = time.time()
             hist_encoding = it % self.dagger_update_freq == 0
+            # hist_encoding = False
 
             # Rollout
             with torch.inference_mode():
