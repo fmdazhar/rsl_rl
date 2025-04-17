@@ -49,12 +49,14 @@ class OnPolicyRunner:
                  env: VecEnv,
                  train_cfg,
                  log_dir=None,
-                 device='cpu'):
+                 device='cpu',
+                 wandb_activate=False):
 
         self.cfg=train_cfg["runner"]
         self.alg_cfg = train_cfg["algorithm"]
         self.policy_cfg = train_cfg["policy"]
         self.device = device
+        self.wandb_activate = wandb_activate
         self.env = env
         if self.env.num_privileged_obs is not None:
             num_critic_obs = self.env.num_privileged_obs 
@@ -212,8 +214,8 @@ class OnPolicyRunner:
             wandb_dict['Train/dones'] = statistics.mean(locs['donebuffer'])
             # wandb.log({'Train/mean_reward/time': statistics.mean(locs['rewbuffer'])}, step=self.tot_time)
             # wandb.log({'Train/mean_episode_length/time': statistics.mean(locs['lenbuffer'])}, step=self.tot_time)
-        
-        wandb.log(wandb_dict, step=locs['it'])
+        if self.wandb_activate:
+            wandb.log(wandb_dict, step=locs['it'])
 
         str = f" \033[1m Learning iteration {locs['it']}/{self.current_learning_iteration + locs['num_learning_iterations']} \033[0m "
 
