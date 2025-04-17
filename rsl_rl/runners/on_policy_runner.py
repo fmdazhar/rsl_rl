@@ -33,12 +33,10 @@ import os
 from collections import deque
 import statistics
 
-from torch.utils.tensorboard import SummaryWriter
 import torch
 
 from rsl_rl.algorithms import PPO
 from rsl_rl.modules import ActorCritic, ActorCriticRecurrent
-from rsl_rl.env import VecEnv
 
 import wandb
 from torchinfo import summary
@@ -46,7 +44,7 @@ from torchinfo import summary
 class OnPolicyRunner:
 
     def __init__(self,
-                 env: VecEnv,
+                 env,
                  train_cfg,
                  log_dir=None,
                  device='cpu',
@@ -82,7 +80,6 @@ class OnPolicyRunner:
 
         # Log
         self.log_dir = log_dir
-        self.writer = None
         self.tot_timesteps = 0
         self.tot_time = 0
         self.current_learning_iteration = 0
@@ -99,9 +96,7 @@ class OnPolicyRunner:
         mean_priv_reg_loss = 0. 
         priv_reg_coef = 0.
 
-        # initialize writer
-        if self.log_dir is not None and self.writer is None:
-            self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+
         if init_at_random_ep_len:
             self.env.episode_length_buf = torch.randint_like(self.env.episode_length_buf, high=int(self.env.max_episode_length))
         obs = self.env.get_observations()
