@@ -38,13 +38,11 @@ from torch.nn.modules import rnn
 # History Encoder
 class StateHistoryEncoder(nn.Module):
     def __init__(self, activation_fn, input_size, tsteps, output_size, tanh_encoder_output=False):
-        # self.device = device
         super(StateHistoryEncoder, self).__init__()
         self.activation_fn = activation_fn
         self.tsteps = tsteps
 
         channel_size = 10
-        # last_activation = nn.ELU()
 
         self.encoder = nn.Sequential(
                 nn.Linear(input_size, 3 * channel_size), self.activation_fn,
@@ -124,10 +122,6 @@ class ActorCritic(nn.Module):
                     priv_encoder_layers.append(nn.Linear(num_priv, priv_encoder_dims[0]))
                     priv_encoder_layers.append(activation)
                     for l in range(len(priv_encoder_dims) - 1):
-                        # if l == len(priv_encoder_dims) - 1:
-                        #     priv_encoder_layers.append(nn.Linear(priv_encoder_dims[l], num_actions))
-                        #     # priv_encoder_layers.append(nn.Tanh())
-                        # else:
                         priv_encoder_layers.append(nn.Linear(priv_encoder_dims[l], priv_encoder_dims[l + 1]))
                         priv_encoder_layers.append(activation)
                     self.priv_encoder = nn.Sequential(*priv_encoder_layers)
@@ -138,18 +132,7 @@ class ActorCritic(nn.Module):
 
                 self.num_priv = num_priv
                 self.num_hist = num_hist
-                self.num_prop = num_prop
-
-                # Priv Encoder
-                # encoder_dim = 8
-                # self.priv_encoder =  nn.Sequential(*[
-                #                         nn.Linear(num_priv, 256), activation,
-                #                         nn.Linear(256, 128), activation,
-                #                         nn.Linear(128, encoder_dim), 
-                #                         # nn.Tanh()
-                #                         nn.LeakyReLU()
-                #                     ])
-                
+                self.num_prop = num_prop                
                 self.history_encoder = StateHistoryEncoder(activation, mlp_input_dim_a, num_hist, priv_encoder_output_dim)
 
                 # Policy
@@ -158,10 +141,6 @@ class ActorCritic(nn.Module):
                     actor_layers.append(nn.Linear(mlp_input_dim_a + priv_encoder_output_dim, actor_hidden_dims[0]))
                     actor_layers.append(activation)
                     for l in range(len(actor_hidden_dims) - 1):
-                        # if l == len(actor_hidden_dims) - 1:
-                        #     actor_layers.append(nn.Linear(actor_hidden_dims[l], num_actions))
-                        #     # actor_layers.append(nn.Tanh())
-                        # else:
                         actor_layers.append(nn.Linear(actor_hidden_dims[l], actor_hidden_dims[l + 1]))
                         actor_layers.append(activation)
                     self.actor_backbone = nn.Sequential(*actor_layers)
@@ -223,9 +202,6 @@ class ActorCritic(nn.Module):
                     critic_layers.append(nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]))
                     critic_layers.append(activation)
                     for l in range(len(critic_hidden_dims) - 1):
-                        # if l == len(critic_hidden_dims) - 1:
-                        #     critic_layers.append(nn.Linear(critic_hidden_dims[l], 1))
-                        # else:
                         critic_layers.append(nn.Linear(critic_hidden_dims[l], critic_hidden_dims[l + 1]))
                         critic_layers.append(activation)
                     self.critic_backbone = nn.Sequential(*critic_layers)
@@ -264,10 +240,6 @@ class ActorCritic(nn.Module):
         self.distribution = None
         # disable args validation for speedup
         Normal.set_default_validate_args = False
-        
-        # seems that we get better performance without init
-        # self.init_memory_weights(self.memory_a, 0.001, 0.)
-        # self.init_memory_weights(self.memory_c, 0.001, 0.)
 
     @staticmethod
     # not used at the moment

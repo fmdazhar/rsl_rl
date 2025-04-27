@@ -83,6 +83,7 @@ class OnPolicyRunner:
         self.tot_timesteps = 0
         self.tot_time = 0
         self.current_learning_iteration = 0
+        self.use_history_encoding = self.alg_cfg["use_history_encoding"]
         self.dagger_update_freq = self.alg_cfg["dagger_update_freq"]
 
         _ = self.env.reset()
@@ -117,8 +118,11 @@ class OnPolicyRunner:
             # self.env.update_command_curriculum()
 
             start = time.time()
-            hist_encoding = it % self.dagger_update_freq == 0
-            # hist_encoding = False
+            # Determine if we perform history encoding, unless disabled by config
+            if not self.use_history_encoding:
+                hist_encoding = False
+            else:
+                hist_encoding = (it % self.dagger_update_freq == 0)
 
             # Rollout
             with torch.inference_mode():
