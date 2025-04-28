@@ -54,6 +54,7 @@ class PPO:
                  desired_kl=0.01,
                  device='cpu',
                  min_policy_std=None,
+                 use_history_encoding=False,
                  dagger_update_freq=20,
                  priv_reg_coef_schedual = [0, 0, 0],
                  ):
