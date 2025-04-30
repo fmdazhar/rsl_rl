@@ -89,7 +89,7 @@ class OnPolicyRunner:
         _ = self.env.reset()
 
     
-    def learn(self, num_learning_iterations, init_at_random_ep_len=False):
+    def learn(self, num_learning_iterations):
         # init metrics
         mean_value_loss = 0.
         mean_surrogate_loss = 0.
@@ -97,9 +97,6 @@ class OnPolicyRunner:
         mean_priv_reg_loss = 0. 
         priv_reg_coef = 0.
 
-
-        if init_at_random_ep_len:
-            self.env.episode_length_buf = torch.randint_like(self.env.episode_length_buf, high=int(self.env.max_episode_length))
         obs = self.env.get_observations()
         privileged_obs = self.env.get_privileged_observations()
         critic_obs = privileged_obs if privileged_obs is not None else obs
