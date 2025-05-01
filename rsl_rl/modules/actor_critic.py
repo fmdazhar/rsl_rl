@@ -104,7 +104,6 @@ class ActorCritic(nn.Module):
         num_hist = kwargs['num_hist']
         num_prop = kwargs['num_prop']
 
-
         activation = get_activation(activation)
 
         mlp_input_dim_a = num_actor_obs
@@ -264,7 +263,7 @@ class ActorCritic(nn.Module):
     
     @property
     def entropy(self):
-        return self.distribution.entropy().sum(dim=-1, keepdim=True)
+        return self.distribution.entropy().sum(dim=-1)
 
     def update_distribution(self, observations, hist_encoding):
         mean = self.actor(observations, hist_encoding)
