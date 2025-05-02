@@ -57,6 +57,7 @@ class PPO:
                  use_history_encoding=False,
                  dagger_update_freq=20,
                  priv_reg_coef_schedual = [0, 0, 0],
+                 bounds_loss_coef=0.0,
                  ):
 
         self.device = device
@@ -87,7 +88,8 @@ class PPO:
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
         self.min_policy_std = torch.tensor(min_policy_std, device=self.device)
-
+        self.bounds_loss_coef = bounds_loss_coef
+        
         self.counter = 0
 
 
@@ -133,6 +135,10 @@ class PPO:
         mean_value_loss = 0
         mean_surrogate_loss = 0
         mean_priv_reg_loss = 0
+        mean_bound_loss = 0
+        mean_kl = 0
+        mean_entropy = 0
+
         if self.actor_critic.is_recurrent:
             generator = self.storage.reccurent_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
         else:
@@ -171,7 +177,6 @@ class PPO:
                         for param_group in self.optimizer.param_groups:
                             param_group['lr'] = self.learning_rate
 
-
                 # Surrogate loss
                 ratio = torch.exp(actions_log_prob_batch - old_actions_log_prob_batch)
                 surrogate = -torch.squeeze(advantages_batch) * ratio
@@ -188,8 +193,13 @@ class PPO:
                     value_loss = torch.max(value_losses, value_losses_clipped).mean()
                 else:
                     value_loss = (returns_batch - value_batch).pow(2).mean()
+                
+                if self.bounds_loss_coef > 0.0:
+                    bound_loss = self._soft_boundary_loss(mu_batch)
+                else:
+                    bound_loss = torch.tensor(0.0, device=self.device)
 
-                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() + priv_reg_coef * priv_reg_loss
+                loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean() + priv_reg_coef * priv_reg_loss + self.bounds_loss_coef * bound_loss
 
                 # Gradient step
                 self.optimizer.zero_grad()
@@ -200,18 +210,27 @@ class PPO:
                 mean_value_loss += value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
                 mean_priv_reg_loss += priv_reg_loss.item()
-                
+                mean_bound_loss      += bound_loss.item()
+                mean_entropy += entropy_batch.mean().item()
+                if self.desired_kl is not None and self.schedule == 'adaptive':
+                    mean_kl += kl_mean.item()
+
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
         mean_priv_reg_loss /= num_updates
+        mean_bound_loss /= num_updates
+        mean_entropy /= num_updates
+        if self.desired_kl is not None and self.schedule == 'adaptive':
+            mean_kl /= num_updates
+
         self.storage.clear()
 
         self.update_counter()
 
-        # self.enforce_min_std()
+        self.enforce_min_std()
 
-        return mean_value_loss, mean_surrogate_loss, mean_priv_reg_loss, priv_reg_coef
+        return mean_value_loss, mean_surrogate_loss, mean_priv_reg_loss, priv_reg_coef, mean_bound_loss, mean_kl, mean_entropy
     
     def update_dagger(self):
         mean_hist_latent_loss = 0
@@ -245,6 +264,12 @@ class PPO:
         current_std = self.actor_critic.std.detach()
         new_std = torch.max(current_std, self.min_policy_std).detach()
         self.actor_critic.std.data = new_std
+    
+    def _soft_boundary_loss(self, mu):
+        """Quadratic penalty outside ±soft_bound."""
+        hi = torch.clamp_min(mu - 1.1, 0.0) ** 2
+        lo = torch.clamp_max(mu + 1.1, 0.0) ** 2
+        return (hi + lo).mean()
     
     def update_counter(self):
         self.counter += 1

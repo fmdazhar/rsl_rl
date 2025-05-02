@@ -96,6 +96,9 @@ class OnPolicyRunner:
         mean_hist_latent_loss = 0.
         mean_priv_reg_loss = 0. 
         priv_reg_coef = 0.
+        mean_bound_loss = 0.
+        mean_kl_loss = 0.
+        mean_entropy_loss = 0
 
         obs = self.env.get_observations()
         privileged_obs = self.env.get_privileged_observations()
@@ -112,7 +115,6 @@ class OnPolicyRunner:
 
         tot_iter = self.current_learning_iteration + num_learning_iterations
         for it in range(self.current_learning_iteration, tot_iter):
-            # self.env.update_command_curriculum()
 
             start = time.time()
             # Determine if we perform history encoding, unless disabled by config
@@ -155,7 +157,7 @@ class OnPolicyRunner:
             if hist_encoding:
                 mean_hist_latent_loss = self.alg.update_dagger()
             else:
-                mean_value_loss, mean_surrogate_loss, mean_priv_reg_loss, priv_reg_coef = self.alg.update()
+                mean_value_loss, mean_surrogate_loss, mean_priv_reg_loss, priv_reg_coef, mean_bound_loss, mean_kl_loss, mean_entropy_loss = self.alg.update()
             
             stop = time.time()
             learn_time = stop - start
@@ -198,8 +200,12 @@ class OnPolicyRunner:
         wandb_dict['Loss/hist_latent_loss'] = locs['mean_hist_latent_loss']
         wandb_dict['Loss/priv_reg_loss'] = locs['mean_priv_reg_loss']
         wandb_dict['Loss/priv_ref_lambda'] = locs['priv_reg_coef']
+        wandb_dict['Loss/bound_loss'] = locs['mean_bound_loss']
         wandb_dict['Loss/learning_rate'] = self.alg.learning_rate
         wandb_dict['Policy/leg_mean_noise_std'] = leg_mean_std.item()
+        wandb_dict['Loss/entropy'] = locs['mean_entropy_loss']
+        wandb_dict['Loss/kl'] = locs['mean_kl_loss']
+ 
         wandb_dict['Policy/noise_std_dist'] = wandb.Histogram(std_numpy)
         wandb_dict['Perf/total_fps'] = fps
         wandb_dict['Perf/collection time'] = locs['collection_time']

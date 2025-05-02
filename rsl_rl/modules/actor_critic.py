@@ -154,7 +154,7 @@ class ActorCritic(nn.Module):
                 for l in range(len(leg_control_head_hidden_dims)):
                     if l == len(leg_control_head_hidden_dims) - 1:
                         actor_leg_layers.append(nn.Linear(leg_control_head_hidden_dims[l], num_leg_actions))
-                        actor_leg_layers.append(nn.Tanh())
+                        # actor_leg_layers.append(nn.Tanh())
                     else:
                         actor_leg_layers.append(nn.Linear(leg_control_head_hidden_dims[l], leg_control_head_hidden_dims[l + 1]))
                         actor_leg_layers.append(activation)
