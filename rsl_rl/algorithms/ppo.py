@@ -207,11 +207,11 @@ class PPO:
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
 
-                mean_value_loss += value_loss.item()
+                mean_value_loss += self.value_loss_coef * value_loss.item()
                 mean_surrogate_loss += surrogate_loss.item()
                 mean_priv_reg_loss += priv_reg_loss.item()
-                mean_bound_loss      += bound_loss.item()
-                mean_entropy += entropy_batch.mean().item()
+                mean_bound_loss      += self.bounds_loss_coef * bound_loss.item()
+                mean_entropy += - self.entropy_coef * entropy_batch.mean().item()
                 if self.desired_kl is not None and self.schedule == 'adaptive':
                     mean_kl += kl_mean.item()
 
