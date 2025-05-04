@@ -178,7 +178,7 @@ class PPO:
                             param_group['lr'] = self.learning_rate
 
                 # Surrogate loss
-                ratio = torch.exp(actions_log_prob_batch - old_actions_log_prob_batch)
+                ratio = torch.exp(actions_log_prob_batch - torch.squeeze(old_actions_log_prob_batch))
                 surrogate = -torch.squeeze(advantages_batch) * ratio
                 surrogate_clipped = -torch.squeeze(advantages_batch) * torch.clamp(ratio, 1.0 - self.clip_param,
                                                                                 1.0 + self.clip_param)
