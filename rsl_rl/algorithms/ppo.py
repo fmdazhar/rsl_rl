@@ -74,7 +74,9 @@ class PPO:
         self.transition = RolloutStorage.Transition()
 
         # Adaptation
-        self.hist_encoder_optimizer = optim.Adam(self.actor_critic.actor.history_encoder.parameters(), lr=learning_rate)
+        self.use_history_encoding = use_history_encoding
+        if self.use_history_encoding:
+            self.hist_encoder_optimizer = optim.Adam(self.actor_critic.actor.history_encoder.parameters(), lr=learning_rate)
         self.priv_reg_coef_schedual = priv_reg_coef_schedual
 
         # PPO parameters
@@ -154,13 +156,16 @@ class PPO:
                 entropy_batch = self.actor_critic.entropy
 
                 # Adaptation module update
-                priv_latent_batch = self.actor_critic.actor.infer_priv_latent(obs_batch)
-                with torch.inference_mode():
-                    hist_latent_batch = self.actor_critic.actor.infer_hist_latent(obs_batch)
-                priv_reg_loss = (priv_latent_batch - hist_latent_batch.detach()).norm(p=2, dim=1).mean()
-                priv_reg_stage = min(max((self.counter - self.priv_reg_coef_schedual[2]), 0) / self.priv_reg_coef_schedual[3], 1)
-                priv_reg_coef = priv_reg_stage * (self.priv_reg_coef_schedual[1] - self.priv_reg_coef_schedual[0]) + self.priv_reg_coef_schedual[0]
-                # priv_reg_loss = torch.zeros(1, device=self.device)
+                if self.use_history_encoding:
+                    priv_latent_batch = self.actor_critic.actor.infer_priv_latent(obs_batch)
+                    with torch.inference_mode():
+                        hist_latent_batch = self.actor_critic.actor.infer_hist_latent(obs_batch)
+                    priv_reg_loss = (priv_latent_batch - hist_latent_batch.detach()).norm(p=2, dim=1).mean()
+                    priv_reg_stage = min(max((self.counter - self.priv_reg_coef_schedual[2]), 0) / self.priv_reg_coef_schedual[3], 1)
+                    priv_reg_coef = priv_reg_stage * (self.priv_reg_coef_schedual[1] - self.priv_reg_coef_schedual[0]) + self.priv_reg_coef_schedual[0]
+                else:    
+                    priv_reg_loss = torch.zeros(1, device=self.device)
+                    priv_reg_coef  = 0.0
 
                 # KL
                 if self.desired_kl != None and self.schedule == 'adaptive':

@@ -64,6 +64,7 @@ class OnPolicyRunner:
         actor_critic: ActorCritic = actor_critic_class( self.env.num_proprio,
                                                         self.env.num_proprio,
                                                         self.env.num_actions,
+                                                        use_history_encoding=self.alg_cfg["use_history_encoding"],
                                                         **self.policy_cfg, 
                                                         num_priv=env.num_priv,
                                                         num_hist=env.history_len, 
