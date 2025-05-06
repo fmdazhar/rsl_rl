@@ -116,7 +116,7 @@ class ActorCritic(nn.Module):
                 num_leg_actions,
                 num_priv, num_hist, num_prop, priv_encoder_dims, use_history_encoding=True):
                 super().__init__()
-
+                self.use_history_encoding = use_history_encoding
                 # Policy
                 if len(priv_encoder_dims) > 0:
                     priv_encoder_layers = []
