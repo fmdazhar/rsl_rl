@@ -86,6 +86,8 @@ class ActorCritic(nn.Module):
     def __init__(self,  num_actor_obs,
                         num_critic_obs,
                         num_actions,
+                        *,
+                        use_history_encoding: bool = True,
                         actor_hidden_dims=[256, 256, 256],
                         critic_hidden_dims=[256, 256, 256],
                         priv_encoder_dims=[64, 20],
@@ -95,7 +97,7 @@ class ActorCritic(nn.Module):
         # if kwargs:
         #     print("ActorCritic.__init__ got unexpected arguments, which will be ignored: " + str([key for key in kwargs.keys()]))
         super(ActorCritic, self).__init__()
-
+        self.use_history_encoding = use_history_encoding
         # self.dual_heads = kwargs['dual_heads']
         leg_control_head_hidden_dims = kwargs['leg_control_head_hidden_dims']
         self.num_leg_actions = kwargs['num_leg_actions']
@@ -112,7 +114,7 @@ class ActorCritic(nn.Module):
         class Actor(nn.Module):
             def __init__(self, mlp_input_dim_a, actor_hidden_dims, activation, leg_control_head_hidden_dims, \
                 num_leg_actions,
-                num_priv, num_hist, num_prop, priv_encoder_dims):
+                num_priv, num_hist, num_prop, priv_encoder_dims, use_history_encoding=True):
                 super().__init__()
 
                 # Policy
@@ -131,8 +133,11 @@ class ActorCritic(nn.Module):
 
                 self.num_priv = num_priv
                 self.num_hist = num_hist
-                self.num_prop = num_prop                
-                self.history_encoder = StateHistoryEncoder(activation, mlp_input_dim_a, num_hist, priv_encoder_output_dim)
+                self.num_prop = num_prop  
+                if self.use_history_encoding:
+                    self.history_encoder = StateHistoryEncoder(activation, mlp_input_dim_a, num_hist, priv_encoder_output_dim)
+                else:
+                    self.history_encoder = None              
 
                 # Policy
                 if len(actor_hidden_dims) > 0:
@@ -162,7 +167,7 @@ class ActorCritic(nn.Module):
             
             def forward(self, obs, hist_encoding=False):
                 obs_prop = obs[:, :self.num_prop]
-                if hist_encoding:
+                if hist_encoding and self.use_history_encoding:
                     latent = self.infer_hist_latent(obs)
                 else:
                     latent = self.infer_priv_latent(obs)
@@ -177,12 +182,14 @@ class ActorCritic(nn.Module):
                 return self.priv_encoder(priv)
             
             def infer_hist_latent(self, obs):
+                if not self.use_history_encoding:
+                    raise RuntimeError("History encoder disabled (set use_history_encoding=True to enable it).")
                 hist = obs[:, -self.num_hist*self.num_prop:]
                 return self.history_encoder(hist.view(-1, self.num_hist, self.num_prop))
             
         self.actor = Actor(mlp_input_dim_a, actor_hidden_dims, activation, leg_control_head_hidden_dims, \
             self.num_leg_actions, 
-            num_priv, num_hist, num_prop, priv_encoder_dims)
+            num_priv, num_hist, num_prop, priv_encoder_dims, use_history_encoding=self.use_history_encoding)
 
 
         # Value function
