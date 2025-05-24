@@ -62,13 +62,12 @@ class OnPolicyRunner:
             num_critic_obs = self.env.num_obs
         actor_critic_class = eval(self.cfg["policy_class_name"]) # ActorCritic
         actor_critic: ActorCritic = actor_critic_class( self.env.num_proprio,
-                                                        self.env.num_proprio,
+                                                        self.env.num_scan,
+                                                        self.env.num_priv,
+                                                        self.env.history_len,
                                                         self.env.num_actions,
                                                         use_history_encoding=self.alg_cfg["use_history_encoding"],
                                                         **self.policy_cfg, 
-                                                        num_priv=env.num_priv,
-                                                        num_hist=env.history_len, 
-                                                        num_prop=env.num_proprio,
                                                         ).to(self.device)
         alg_class = eval(self.cfg["algorithm_class_name"]) # PPO
         self.alg: PPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
@@ -108,6 +107,7 @@ class OnPolicyRunner:
         self.alg.actor_critic.train() # switch to train mode (for dropout for example)
 
         ep_infos = []
+        extras_info = []
         rewbuffer = deque(maxlen=100)
         lenbuffer = deque(maxlen=100)
         donebuffer = deque(maxlen=100)
@@ -137,6 +137,8 @@ class OnPolicyRunner:
                         # Book keeping
                         if 'episode' in infos:
                             ep_infos.append(infos['episode'])
+                        if 'extras' in infos:
+                            self.extras_infos.append(infos['extras'])
                         cur_reward_sum += rewards
                         cur_episode_length += 1
                         new_ids = (dones > 0).nonzero(as_tuple=False)
@@ -167,6 +169,7 @@ class OnPolicyRunner:
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(it)))
             ep_infos.clear()
+            extras_info.clear()
         
         self.current_learning_iteration += num_learning_iterations
         self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(self.current_learning_iteration)))
@@ -182,6 +185,9 @@ class OnPolicyRunner:
             for key in locs['ep_infos'][0]:
                 infotensor = torch.tensor([], device=self.device)
                 for ep_info in locs['ep_infos']:
+                    if key not in ep_info:
+                        continue
+                    val = ep_info[key]
                     # handle scalar and zero dimensional tensor infos
                     if not isinstance(ep_info[key], torch.Tensor):
                         ep_info[key] = torch.Tensor([ep_info[key]])
@@ -192,6 +198,23 @@ class OnPolicyRunner:
                 # wandb.log({'Episode/' + key: value}, step=locs['it'])
                 wandb_dict['Episode/' + key] = value
                 ep_string += f"""{f'Mean episode {key}:':>{pad}} {value:.4f}\n"""
+        if locs['extras_info']:
+            for key in locs['extras_info'][0]:
+                infotensor = torch.tensor([], device=self.device)
+                for ep_info in locs['extras_info']:
+                    if key not in ep_info:
+                        continue
+                    val = ep_info[key]
+                    # handle scalar and zero dimensional tensor infos
+                    if not isinstance(ep_info[key], torch.Tensor):
+                        ep_info[key] = torch.Tensor([ep_info[key]])
+                    if len(ep_info[key].shape) == 0:
+                        ep_info[key] = ep_info[key].unsqueeze(0)
+                    infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
+                value = torch.mean(infotensor)
+                # wandb.log({'Episode/' + key: value}, step=locs['it'])
+                wandb_dict['Extras/' + key] = value
+
         leg_mean_std = self.alg.actor_critic.std.mean()
         std_numpy = self.alg.actor_critic.std.cpu().detach().numpy()
         fps = int(self.num_steps_per_env * self.env.num_envs / (locs['collection_time'] + locs['learn_time']))
@@ -207,7 +230,7 @@ class OnPolicyRunner:
         wandb_dict['Loss/entropy'] = locs['mean_entropy_loss']
         wandb_dict['Loss/kl'] = locs['mean_kl_loss']
  
-        wandb_dict['Policy/noise_std_dist'] = wandb.Histogram(std_numpy)
+        wandb.log({"Policy/noise_std_dist": wandb.Histogram(std_numpy)}, step=it)
         wandb_dict['Perf/total_fps'] = fps
         wandb_dict['Perf/collection time'] = locs['collection_time']
         wandb_dict['Perf/learning_time'] = locs['learn_time']
@@ -215,8 +238,6 @@ class OnPolicyRunner:
             wandb_dict['Train/mean_reward'] = statistics.mean(locs['rewbuffer'])
             wandb_dict['Train/mean_episode_length'] = statistics.mean(locs['lenbuffer'])
             wandb_dict['Train/dones'] = statistics.mean(locs['donebuffer'])
-            # wandb.log({'Train/mean_reward/time': statistics.mean(locs['rewbuffer'])}, step=self.tot_time)
-            # wandb.log({'Train/mean_episode_length/time': statistics.mean(locs['lenbuffer'])}, step=self.tot_time)
         if self.wandb_activate:
             wandb.log(wandb_dict, step=locs['it'])
 

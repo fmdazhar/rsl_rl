@@ -83,14 +83,17 @@ class StateHistoryEncoder(nn.Module):
 
 class ActorCritic(nn.Module):
     is_recurrent = False
-    def __init__(self,  num_actor_obs,
-                        num_critic_obs,
+    def __init__(self,  num_prop,
+                        num_scan,
+                        num_priv,
+                        num_hist,
                         num_actions,
                         *,
                         use_history_encoding: bool = True,
                         actor_hidden_dims=[256, 256, 256],
                         critic_hidden_dims=[256, 256, 256],
                         priv_encoder_dims=[64, 20],
+                        scan_encoder_dims: [256, 256, 128],
                         activation='elu',
                         init_std=1,
                         **kwargs):
@@ -102,22 +105,34 @@ class ActorCritic(nn.Module):
         leg_control_head_hidden_dims = kwargs['leg_control_head_hidden_dims']
         self.num_leg_actions = kwargs['num_leg_actions']
 
-        num_priv = kwargs['num_priv']
-        num_hist = kwargs['num_hist']
-        num_prop = kwargs['num_prop']
-
         activation = get_activation(activation)
 
-        mlp_input_dim_a = num_actor_obs
-        mlp_input_dim_c = num_critic_obs
-
         class Actor(nn.Module):
-            def __init__(self, mlp_input_dim_a, actor_hidden_dims, activation, leg_control_head_hidden_dims, \
+            def __init__(self, actor_hidden_dims, activation, leg_control_head_hidden_dims, \
                 num_leg_actions,
-                num_priv, num_hist, num_prop, priv_encoder_dims, use_history_encoding=True):
+                num_priv, num_hist, num_prop, num_scan, priv_encoder_dims, scan_encoder_dims, use_history_encoding=True):
                 super().__init__()
+                
                 self.use_history_encoding = use_history_encoding
-                # Policy
+                self.num_priv = num_priv
+                self.num_hist = num_hist
+                self.num_prop = num_prop 
+                self.num_scan = num_scan
+                
+                # ── Scan-encoder ───────────────────────────────────────────────
+                self.if_scan_encode = (num_scan > 0)
+                if self.if_scan_encode:
+                    scan_layers = [nn.Linear(num_scan, scan_encoder_dims[0]), activation]
+                    for i in range(len(scan_encoder_dims) - 1):
+                        out_dim = scan_encoder_dims[i + 1]
+                        scan_layers += [nn.Linear(scan_encoder_dims[i], out_dim),
+                                        activation if i < len(scan_encoder_dims) - 2 else nn.Tanh()]
+                    self.scan_encoder = nn.Sequential(*scan_layers)
+                    scan_encoder_output_dim = scan_encoder_dims[-1]
+                else:
+                    self.scan_encoder   = nn.Identity()
+                    scan_encoder_output_dim = num_scan
+
                 if len(priv_encoder_dims) > 0:
                     priv_encoder_layers = []
                     priv_encoder_layers.append(nn.Linear(num_priv, priv_encoder_dims[0]))
@@ -131,18 +146,15 @@ class ActorCritic(nn.Module):
                     self.priv_encoder = nn.Identity()
                     priv_encoder_output_dim = num_priv
 
-                self.num_priv = num_priv
-                self.num_hist = num_hist
-                self.num_prop = num_prop  
                 if self.use_history_encoding:
-                    self.history_encoder = StateHistoryEncoder(activation, mlp_input_dim_a, num_hist, priv_encoder_output_dim)
+                    self.history_encoder = StateHistoryEncoder(activation, num_prop + num_scan, num_hist, priv_encoder_output_dim)
                 else:
                     self.history_encoder = None              
 
                 # Policy
                 if len(actor_hidden_dims) > 0:
                     actor_layers = []
-                    actor_layers.append(nn.Linear(mlp_input_dim_a + priv_encoder_output_dim, actor_hidden_dims[0]))
+                    actor_layers.append(nn.Linear(num_prop + scan_encoder_output_dim + priv_encoder_output_dim, actor_hidden_dims[0]))
                     actor_layers.append(activation)
                     for l in range(len(actor_hidden_dims) - 1):
                         actor_layers.append(nn.Linear(actor_hidden_dims[l], actor_hidden_dims[l + 1]))
@@ -151,7 +163,7 @@ class ActorCritic(nn.Module):
                     actor_backbone_output_dim = actor_hidden_dims[-1]
                 else:
                     self.actor_backbone = nn.Identity()
-                    actor_backbone_output_dim = mlp_input_dim_a + priv_encoder_output_dim
+                    actor_backbone_output_dim = num_prop + scan_encoder_output_dim + priv_encoder_output_dim
 
                 actor_leg_layers = []
                 actor_leg_layers.append(nn.Linear(actor_backbone_output_dim, leg_control_head_hidden_dims[0]))
@@ -167,18 +179,26 @@ class ActorCritic(nn.Module):
             
             def forward(self, obs, hist_encoding=False):
                 obs_prop = obs[:, :self.num_prop]
+                obs_scan = obs[:, self.num_prop: self.num_prop + self.num_scan]
+
                 if hist_encoding and self.use_history_encoding:
                     latent = self.infer_hist_latent(obs)
                 else:
                     latent = self.infer_priv_latent(obs)
+                
+                if self.if_scan_encode:
+                    scan_lat  = self.scan_encoder(obs_scan)
+                    obs_prop_scan = torch.cat([obs_prop, scan_lat], dim=1)
+                else:
+                    obs_prop_scan = obs[:, :self.num_prop + self.num_scan]
 
-                backbone_input = torch.cat([obs_prop, latent], dim=1)
+                backbone_input = torch.cat([obs_prop_scan, latent], dim=1)
                 backbone_output = self.actor_backbone(backbone_input)
                 leg_output = self.actor_leg_control_head(backbone_output)
                 return leg_output
             
             def infer_priv_latent(self, obs):
-                priv = obs[:, self.num_prop: self.num_prop + self.num_priv]
+                priv = obs[:, self.num_prop + self.num_scan: self.num_prop + self.num_scan + self.num_priv]
                 return self.priv_encoder(priv)
             
             def infer_hist_latent(self, obs):
@@ -187,25 +207,32 @@ class ActorCritic(nn.Module):
                 hist = obs[:, -self.num_hist*self.num_prop:]
                 return self.history_encoder(hist.view(-1, self.num_hist, self.num_prop))
             
-        self.actor = Actor(mlp_input_dim_a, actor_hidden_dims, activation, leg_control_head_hidden_dims, \
+            def infer_Scan_latent(self, obs):
+                if not self.if_scan_encode:
+                    raise RuntimeError("Scan encoder disabled (set if_scan_encode=True to enable it).")
+                scan = obs[:, self.num_prop: self.num_prop + self.num_scan]
+                return self.scan_encoder(scan)
+            
+        self.actor = Actor(actor_hidden_dims, activation, leg_control_head_hidden_dims, \
             self.num_leg_actions, 
-            num_priv, num_hist, num_prop, priv_encoder_dims, use_history_encoding=self.use_history_encoding)
+            num_priv, num_hist, num_prop, num_scan, priv_encoder_dims, scan_encoder_dims, use_history_encoding=self.use_history_encoding)
 
 
         # Value function
         class Critic(nn.Module):
-            def __init__(self, mlp_input_dim_c, critic_hidden_dims, activation, leg_control_head_hidden_dims,
-                         num_priv, num_hist, num_prop):
+            def __init__(self, critic_hidden_dims, activation, leg_control_head_hidden_dims,
+                         num_priv, num_hist, num_prop, num_scan):
                 super().__init__()
 
                 self.num_priv = num_priv
                 self.num_hist = num_hist
                 self.num_prop = num_prop
+                self.num_scan = num_scan
 
                 # Value
                 if len(critic_hidden_dims) > 0:
                     critic_layers = []
-                    critic_layers.append(nn.Linear(mlp_input_dim_c, critic_hidden_dims[0]))
+                    critic_layers.append(nn.Linear(num_prop + num_scan + num_priv, critic_hidden_dims[0]))
                     critic_layers.append(activation)
                     for l in range(len(critic_hidden_dims) - 1):
                         critic_layers.append(nn.Linear(critic_hidden_dims[l], critic_hidden_dims[l + 1]))
@@ -214,7 +241,7 @@ class ActorCritic(nn.Module):
                     critic_backbone_output_dim = critic_hidden_dims[-1]
                 else:
                     self.critic_backbone = nn.Identity()
-                    critic_backbone_output_dim = mlp_input_dim_c
+                    critic_backbone_output_dim = num_prop + num_scan
 
                 critic_leg_layers = []
                 critic_leg_layers.append(nn.Linear(critic_backbone_output_dim, leg_control_head_hidden_dims[0]))
@@ -229,13 +256,13 @@ class ActorCritic(nn.Module):
 
             
             def forward(self, obs):
-                prop_and_priv = obs[:, :self.num_prop + self.num_priv]
+                prop_and_priv = obs[:, :self.num_prop + self.num_scan + self.num_priv]
                 backbone_output = self.critic_backbone(prop_and_priv)
                 leg_output = self.critic_leg_control_head(backbone_output)
                 return leg_output
 
-        self.critic = Critic(mlp_input_dim_c + num_priv, critic_hidden_dims, activation, leg_control_head_hidden_dims, 
-                             num_priv, num_hist, num_prop)
+        self.critic = Critic(critic_hidden_dims, activation, leg_control_head_hidden_dims, 
+                             num_priv, num_hist, num_prop, num_scan)
 
 
         print(f"Actor MLP: {self.actor}")
