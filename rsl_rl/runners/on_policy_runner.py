@@ -138,7 +138,7 @@ class OnPolicyRunner:
                         if 'episode' in infos:
                             ep_infos.append(infos['episode'])
                         if 'extras' in infos:
-                            self.extras_infos.append(infos['extras'])
+                            extras_info.append(infos['extras'])
                         cur_reward_sum += rewards
                         cur_episode_length += 1
                         new_ids = (dones > 0).nonzero(as_tuple=False)
@@ -230,7 +230,7 @@ class OnPolicyRunner:
         wandb_dict['Loss/entropy'] = locs['mean_entropy_loss']
         wandb_dict['Loss/kl'] = locs['mean_kl_loss']
  
-        wandb.log({"Policy/noise_std_dist": wandb.Histogram(std_numpy)}, step=it)
+        wandb_dict["Policy/noise_std_dist"] = wandb.Histogram(std_numpy)
         wandb_dict['Perf/total_fps'] = fps
         wandb_dict['Perf/collection time'] = locs['collection_time']
         wandb_dict['Perf/learning_time'] = locs['learn_time']

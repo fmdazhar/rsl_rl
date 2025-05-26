@@ -120,7 +120,7 @@ class ActorCritic(nn.Module):
                 self.num_scan = num_scan
                 
                 # ── Scan-encoder ───────────────────────────────────────────────
-                self.if_scan_encode = (num_scan > 0)
+                self.if_scan_encode = (num_scan > 0 and len(scan_encoder_dims) > 0)
                 if self.if_scan_encode:
                     scan_layers = [nn.Linear(num_scan, scan_encoder_dims[0]), activation]
                     for i in range(len(scan_encoder_dims) - 1):
@@ -204,8 +204,9 @@ class ActorCritic(nn.Module):
             def infer_hist_latent(self, obs):
                 if not self.use_history_encoding:
                     raise RuntimeError("History encoder disabled (set use_history_encoding=True to enable it).")
-                hist = obs[:, -self.num_hist*self.num_prop:]
-                return self.history_encoder(hist.view(-1, self.num_hist, self.num_prop))
+                total_hist_size = self.num_hist * (self.num_prop + self.num_scan)
+                hist = obs[:, -total_hist_size:]
+                return self.history_encoder(hist.view(-1, self.num_hist, self.num_prop + self.num_scan))
             
             def infer_Scan_latent(self, obs):
                 if not self.if_scan_encode:
