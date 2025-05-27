@@ -77,7 +77,17 @@ class PPO:
         self.use_history_encoding = use_history_encoding
         if self.use_history_encoding:
             self.hist_encoder_optimizer = optim.Adam(self.actor_critic.actor.history_encoder.parameters(), lr=learning_rate)
-        self.priv_reg_coef_schedual = priv_reg_coef_schedual
+        if priv_reg_coef_schedual is None:
+            priv_reg_coef_schedual = []
+        self.priv_schedules = []
+        for sch in priv_reg_coef_schedual:
+            init, target, start, dur = sch
+            self.priv_schedules.append({
+                'init': init,
+                'target': target,
+                'start': start,
+                'dur': dur
+            })
 
         # PPO parameters
         self.clip_param = clip_param
@@ -133,6 +143,16 @@ class PPO:
         last_values= self.actor_critic.evaluate(last_critic_obs).detach()
         self.storage.compute_returns(last_values, self.gamma, self.lam)
 
+    def _compute_priv_reg_coef(self):
+        # Sum contributions from all schedules
+        coef = 0.0
+        for sch in self.priv_schedules:
+            stage = 0.0
+            if self.counter >= sch['start']:
+                stage = min((self.counter - sch['start']) / sch['dur'], 1.0)
+            coef += sch['init'] + stage * (sch['target'] - sch['init'])
+        return coef
+
     def update(self):
         mean_value_loss = 0
         mean_surrogate_loss = 0
@@ -161,8 +181,9 @@ class PPO:
                     with torch.inference_mode():
                         hist_latent_batch = self.actor_critic.actor.infer_hist_latent(obs_batch)
                     priv_reg_loss = (priv_latent_batch - hist_latent_batch.detach()).norm(p=2, dim=1).mean()
-                    priv_reg_stage = min(max((self.counter - self.priv_reg_coef_schedual[2]), 0) / self.priv_reg_coef_schedual[3], 1)
-                    priv_reg_coef = priv_reg_stage * (self.priv_reg_coef_schedual[1] - self.priv_reg_coef_schedual[0]) + self.priv_reg_coef_schedual[0]
+                    # priv_reg_stage = min(max((self.counter - self.priv_reg_coef_schedual[2]), 0) / self.priv_reg_coef_schedual[3], 1)
+                    # priv_reg_coef = priv_reg_stage * (self.priv_reg_coef_schedual[1] - self.priv_reg_coef_schedual[0]) + self.priv_reg_coef_schedual[0]
+                    priv_reg_coef = self._compute_priv_reg_coef()
                 else:    
                     priv_reg_loss = torch.zeros(1, device=self.device)
                     priv_reg_coef  = 0.0
