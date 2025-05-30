@@ -55,6 +55,7 @@ class PPO:
                  device='cpu',
                  min_policy_std=None,
                  use_history_encoding=False,
+                 history_encoder_learning_rate=1e-3,
                  dagger_update_freq=20,
                  priv_reg_coef_schedual = [0, 0, 0],
                  bounds_loss_coef=0.0,
@@ -76,7 +77,7 @@ class PPO:
         # Adaptation
         self.use_history_encoding = use_history_encoding
         if self.use_history_encoding:
-            self.hist_encoder_optimizer = optim.Adam(self.actor_critic.actor.history_encoder.parameters(), lr=learning_rate)
+            self.hist_encoder_optimizer = optim.Adam(self.actor_critic.actor.history_encoder.parameters(), lr=history_encoder_learning_rate)
         if priv_reg_coef_schedual is None:
             priv_reg_coef_schedual = []
         self.priv_schedules = []
