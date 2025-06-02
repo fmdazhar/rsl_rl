@@ -174,17 +174,17 @@ class OnPolicyRunner:
         self.current_learning_iteration += num_learning_iterations
         self.save(os.path.join(self.log_dir, 'model_{}.pt'.format(self.current_learning_iteration)))
 
-    def to_wandb_table(self, name: str | None = None):
+    # def to_wandb_table(self, name: str | None = None):
 
-        cols = self.keys + ["weight"]
-        rows = []
+    #     cols = self.keys + ["weight"]
+    #     rows = []
 
-        for j in range(self.grid.shape[1]):
-            row = [float(self.grid[d, j]) for d in range(len(self.keys))]  # centroids
-            row.append(float(self.weights[j]))                             # weight
-            rows.append(row)
+    #     for j in range(self.grid.shape[1]):
+    #         row = [float(self.grid[d, j]) for d in range(len(self.keys))]  # centroids
+    #         row.append(float(self.weights[j]))                             # weight
+    #         rows.append(row)
 
-        return wandb.Table(columns=cols, data=rows, allow_mixed_types=False, name=name)
+    #     return wandb.Table(columns=cols, data=rows, allow_mixed_types=False, name=name)
 
 
     def log(self, locs, width=80, pad=35):
@@ -252,13 +252,13 @@ class OnPolicyRunner:
             wandb_dict['Train/mean_episode_length'] = statistics.mean(locs['lenbuffer'])
             wandb_dict['Train/dones'] = statistics.mean(locs['donebuffer'])
 
-        if self.wandb_activate and hasattr(self.env._task, "curricula"):
-            log_every = self.cfg.get("curriculum_log_interval", 100)
-            if locs['it'] % log_every == 0:
-                for idx, cur in enumerate(self.env._task.curricula):
-                    table = cur.to_wandb_table(name=f"curr_grid_{idx}")
-                    # You can tuck many tables inside one W&B dict:
-                    wandb_dict[f"Curriculum/grid_{idx}"] = table
+        # if self.wandb_activate and hasattr(self.env._task, "curricula"):
+        #     log_every = self.cfg.get("curriculum_log_interval", 100)
+        #     if locs['it'] % log_every == 0:
+        #         for idx, cur in enumerate(self.env._task.curricula):
+        #             table = cur.to_wandb_table(name=f"curr_grid_{idx}")
+        #             # You can tuck many tables inside one W&B dict:
+        #             wandb_dict[f"Curriculum/grid_{idx}"] = table
                     
         if self.wandb_activate:
             wandb.log(wandb_dict, step=locs['it'])

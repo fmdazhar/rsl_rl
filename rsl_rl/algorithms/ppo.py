@@ -145,14 +145,20 @@ class PPO:
         self.storage.compute_returns(last_values, self.gamma, self.lam)
 
     def _compute_priv_reg_coef(self):
-        # Sum contributions from all schedules
-        coef = 0.0
+        """Piece-wise schedule: use the latest entry whose 'start' has passed."""
+        # assumes self.priv_schedules is sorted by 'start'
+        active = None
         for sch in self.priv_schedules:
-            stage = 0.0
             if self.counter >= sch['start']:
-                stage = min((self.counter - sch['start']) / sch['dur'], 1.0)
-            coef += sch['init'] + stage * (sch['target'] - sch['init'])
-        return coef
+                active = sch
+            else:
+                break                     # subsequent schedules start later
+        if active is None:
+            return 0.0                   # before the first schedule
+        init, target, start, dur = (active['init'], active['target'],
+                                    active['start'], active['dur'])
+        stage = min((self.counter - start) / dur, 1.0)
+        return init + stage * (target - init)
 
     def update(self):
         mean_value_loss = 0
